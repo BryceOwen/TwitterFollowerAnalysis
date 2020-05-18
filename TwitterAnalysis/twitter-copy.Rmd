@@ -1,0 +1,74 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE)
+
+library(rtweet)
+library(tidyverse)
+library(ggrepel)
+library(ggmap)
+library(leaflet)
+
+```
+
+## Twitter data of @GonzagaMBA followers 
+
+
+The project uses a GitHub package called rtweet to strip Twitter data from the Twitter API. We use the get_followers() function to gather a data frame of Twitter-assigned User IDs from the Gonzaga MBA account. Next, the lookup function uses that data frame to compile all of the relevant user data (found under names(gumbafollowersdata)) such as user name, location, longitude and latitude coordinates, links to profile pictures, follower counts, following counts, etc.
+
+Now that we have the data in a large format, we can filter out some set parameters and visualize it with a graph. In this case, we are looking to label the accounts that follow GUMBA and that GUMBA follows back with more than 1 million followers or 250,000 friends. Twitter defines a friend as someone who you follow and who follows you back. The graph shows us that hootsuite, PenguinUKBooks, soledadobrien, and KarenJeanHood all meet the label criteria.
+```{r}
+#https://github.com/ropensci/rtweet
+
+
+  gumbafollowers=get_followers("GonzagaMBA")
+  gumbafollowersdata <- lookup_users(gumbafollowers$user_id)
+ # save(gumbafollowersdata,file="gumbafollowers.Rda")
+# load("gumbafollowers.Rda")
+names(gumbafollowersdata)
+# followers count 
+# friends count
+
+gumbafollowersdata%>%mutate(label=ifelse(friends_count>250000|followers_count>1000000,screen_name,""))%>%ggplot(.,aes(friends_count,followers_count))+geom_point()+geom_text_repel(aes(label=label),size = 10/.pt,
+      point.padding = 0.1, box.padding = .6, force = 1,min.segment.length = 0, seed = 7654)+theme_bw()+labs(x="Count of friends",y="Count of followers", options(scipen=3))+ggtitle("Friends greater than 250,000 or Followers greater than 1m")
+
+
+```
+
+## Followers of @GonzagaMBA again..
+
+The above data shows a few outliers, so we can dive deeper into the cluster to see who the larger makeup of followers are. This data filters out those outliers and graphs the followers of GonzagaMBA that have less than 250,000 friends or less than 1 million followers. The labels show the accounts that have more than 23,000 followers or more than 60,000 friends.
+```{r}
+gumbafollowersdata%>%filter(friends_count<=250000 & followers_count<=1000000)%>%mutate(label=ifelse(friends_count>60000|followers_count>23000,screen_name,""))%>%ggplot(.,aes(friends_count,followers_count))+geom_point()+geom_text_repel(aes(label=label), size = 10/.pt,
+      point.padding = 0.1, box.padding = .6, force = 1,
+      min.segment.length = 0, seed = 7654)+theme_bw()+labs(x="Count of friends",y="Count of followers")+ggtitle("Friends less than 250k and Followers less than 1m")
+```
+
+## Location of GUMBA followers
+
+If we want to visualize the locations of the followers, we can gather the location variable from our dataset. Using the geocode() function, we can use Google's geocoding API to create a new dataset called locs that contains the locations and their corresponding coordinates. Once we add these coordinates as longitude and latitude variables in our gumbafollowersdata data set, we can plot. We can add these points to a world map using ggplot which calls the MapsStatic API from Google which must be enabled in the Google Cloud console. The output map is a static map that shows the entire world with the plotted twitter followers.
+```{r}
+
+gumbafollowersdata%>%select(location)%>%head()
+
+# 
+# API KEY # for ggmap to geocode
+ 
+
+locs=geocode(as.character(unique(gumbafollowersdata$location)))
+  locs$address=unique(gumbafollowersdata$location)
+  gumbafollowersdata$latitude=locs$lat[ match(gumbafollowersdata$location,locs$address)]
+  gumbafollowersdata$longitude=locs$lon[ match(gumbafollowersdata$location,locs$address)]
+
+#    save(gumbafollowersdata,file="gumbafollowers.Rda")
+  # load("gumbafollowers.Rda")
+  ggmap(get_map("world",zoom=1))+geom_point(data=gumbafollowersdata,aes(longitude,latitude),color="red")  
+```
+
+
+## Locations again
+
+This final map is an interactive one (thanks to leaflet()) with blue circles representing each follower. The circles can be interacted with and will display the city, state, country, or region that the user has set their location to.
+```{r}
+gumbafollowersdata%>%leaflet()%>%addTiles() %>%
+    addCircleMarkers(popup =~location,radius = 4,fillOpacity = 0.5,stroke = FALSE)
+```
+
